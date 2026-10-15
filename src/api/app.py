@@ -44,6 +44,8 @@ from api.schemas import (
     SetActiveRequest,
     SourceDetail,
     SourceInfo,
+    WebSourcesRequest,
+    WebSourcesResponse,
 )
 
 app = FastAPI(title="NotebookLM (LangChain learning project)")
@@ -92,6 +94,17 @@ async def upload_source(file: UploadFile = File(...)) -> SourceInfo:
     if not content.strip():
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
     return services.add_source(file.filename, content)
+
+
+@app.post("/api/sources/web", response_model=WebSourcesResponse)
+def add_web_sources(req: WebSourcesRequest) -> WebSourcesResponse:
+    query = req.query.strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="Search query is empty.")
+    try:
+        return services.add_web_sources(query)
+    except Exception as exc:  # Firecrawl / LLM / network failures
+        raise HTTPException(status_code=502, detail=f"Web search failed: {exc}") from exc
 
 
 @app.get("/api/sources/{source_id}", response_model=SourceDetail)

@@ -17,8 +17,9 @@ from api.schemas import (
     Note,
     SourceDetail,
     SourceInfo,
+    WebSourcesResponse,
 )
-from agents import chat
+from agents import chat, research
 from core.store import store
 
 
@@ -64,6 +65,14 @@ def set_source_active(source_id: str, active: bool) -> SourceInfo | None:
 
 def remove_source(source_id: str) -> bool:
     return store.remove(source_id)
+
+
+def add_web_sources(query: str) -> WebSourcesResponse:
+    """Deep web search: the research agent scrapes pages and indexes them as sources."""
+    result = research.research(query)
+    return WebSourcesResponse(
+        summary=result.summary, sources=[_to_info(s) for s in result.sources]
+    )
 
 
 def _auto_name(content: str) -> str:

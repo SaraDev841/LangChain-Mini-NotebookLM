@@ -42,6 +42,17 @@ class SetActiveRequest(BaseModel):
     active: bool
 
 
+class WebSourcesRequest(BaseModel):
+    """Find sources on the web for a topic (deep search)."""
+
+    query: str
+
+
+class WebSourcesResponse(BaseModel):
+    summary: str
+    sources: list[SourceInfo]
+
+
 # -- chat ----------------------------------------------------------------------
 
 

@@ -110,6 +110,27 @@ async function uploadFile(file) {
   await loadSources();
 }
 
+async function searchWeb() {
+  const query = $("web-query").value.trim();
+  if (!query) return;
+  const btn = $("web-search");
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Searching…";
+  try {
+    const data = await api.send("POST", "/api/sources/web", { query });
+    $("web-query").value = "";
+    $("add-form").classList.add("hidden");
+    await loadSources();
+    addMessage("system", `🌐 Added ${data.sources.length} web source(s). ${data.summary}`);
+  } catch (e) {
+    addMessage("system", `⚠ ${e.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+}
+
 async function selectAll(checked) {
   await Promise.all(
     state.sources
@@ -268,6 +289,13 @@ $("add-toggle").onclick = () => $("add-form").classList.toggle("hidden");
 $("add-cancel").onclick = () => $("add-form").classList.add("hidden");
 $("add-form").addEventListener("submit", addText);
 $("add-file").onchange = (e) => e.target.files[0] && uploadFile(e.target.files[0]);
+$("web-search").onclick = searchWeb;
+$("web-query").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    searchWeb();
+  }
+});
 $("select-all").onchange = (e) => selectAll(e.target.checked);
 
 $("chat-form").addEventListener("submit", (e) => {
