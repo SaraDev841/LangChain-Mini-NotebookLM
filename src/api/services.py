@@ -1,8 +1,8 @@
 """Backend services: translate API requests into the LangChain code.
 
 This is the thin layer between the stable API contract and the per-stage implementations.
-Source management and notes are product glue (in-memory); chat is powered by the stage-2
-agent; Studio artifacts raise ``ComingSoon`` until structured output lands in stage 3.
+Source management and notes are product glue (in-memory); chat is powered by the chat
+agent; Studio artifacts raise ``ComingSoon`` until structured output is implemented.
 """
 
 from __future__ import annotations
@@ -103,7 +103,7 @@ def _auto_name(content: str) -> str:
 
 
 def run_chat(req: ChatRequest) -> ChatResponse:
-    """Answer a chat turn with the stage-2 agent, grounded in the active sources."""
+    """Answer a chat turn with the chat agent, grounded in the active sources."""
     if not store.active_ids():
         return ChatResponse(
             answer="No active sources. Enable at least one source on the left to chat.",

@@ -1,4 +1,4 @@
-"""Research agent (stage 3): searches the web with Firecrawl and indexes pages as sources.
+"""Research agent: searches the web with Firecrawl and indexes pages as sources.
 
 The agent plans several search queries, picks the most credible URLs, scrapes them, and
 every scraped page is added to the SourceStore (chunked + embedded), so the chat agent can

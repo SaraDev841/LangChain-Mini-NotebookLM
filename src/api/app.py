@@ -14,7 +14,7 @@ Endpoints
         POST   /api/chat                 grounded chat (engine + impl A/B)
     Studio
         GET    /api/studio/artifacts     artifact kinds
-        POST   /api/studio/generate      generate (501 until stage 3)
+        POST   /api/studio/generate      generate (501: not implemented yet)
     Notes
         GET    /api/notes
         POST   /api/notes

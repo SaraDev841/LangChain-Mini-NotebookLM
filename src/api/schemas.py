@@ -86,7 +86,7 @@ class ChatRequest(BaseModel):
     """A grounded-chat turn."""
 
     message: str
-    thread_id: str | None = None  # used from stage 4 (short-term memory)
+    thread_id: str | None = None  # conversation id for short-term memory
 
 
 class ChatResponse(BaseModel):

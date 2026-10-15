@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Added in later stages (e.g. MCP in stage 9)
+# Optional extras (e.g. MCP)
 mcp = ["langchain-mcp-adapters>=0.1.0"]
 
 [project.scripts]
