@@ -102,9 +102,19 @@ def add_web_sources(req: WebSourcesRequest) -> WebSourcesResponse:
     if not query:
         raise HTTPException(status_code=400, detail="Search query is empty.")
     try:
-        return services.add_web_sources(query)
+        result = services.add_web_sources(query)
     except Exception as exc:  # Firecrawl / LLM / network failures
         raise HTTPException(status_code=502, detail=f"Web search failed: {exc}") from exc
+    if not result.sources:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "No pages could be scraped (the sites may block scraping, or the free Firecrawl "
+                "tier is rate-limited). Try another topic or set FIRECRAWL_API_KEY in .env. "
+                f"Agent notes: {result.summary}"
+            ),
+        )
+    return result
 
 
 @app.get("/api/sources/{source_id}", response_model=SourceDetail)

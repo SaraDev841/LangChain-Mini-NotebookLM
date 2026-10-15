@@ -53,7 +53,14 @@ def _field(obj, name: str, default=None):
 def _client() -> Firecrawl:
     # Without a key Firecrawl's free, rate-limited tier is used for scrape/search.
     api_key = os.getenv("FIRECRAWL_API_KEY", "").strip()
-    return Firecrawl(api_key=api_key) if api_key else Firecrawl()
+    if not api_key or api_key.endswith("..."):  # unset or the .env.example placeholder
+        return Firecrawl()
+    return Firecrawl(api_key=api_key)
+
+
+def _error(action: str, exc: Exception) -> str:
+    """Report a failed web call to the agent so it can skip it and try something else."""
+    return f"{action} failed: {exc}. Skip this one and try a different URL or query."
 
 
 def _add_page(store: SourceStore, added: list[Source], url: str, doc) -> str:
@@ -73,7 +80,10 @@ def _make_tools(store: SourceStore, added: list[Source]):
     @tool
     def web_search(query: str, limit: int = 5) -> str:
         """Search the web. Returns numbered results with title, url and a short description."""
-        result = _client().search(query, limit=limit)
+        try:
+            result = _client().search(query, limit=limit)
+        except Exception as exc:
+            return _error(f"Search for '{query}'", exc)
         items = _field(result, "web") or []
         if not items:
             return "No results."
@@ -88,20 +98,26 @@ def _make_tools(store: SourceStore, added: list[Source]):
     @tool
     def web_scrape(url: str) -> str:
         """Scrape one web page and add its main content to the notebook as a source."""
-        doc = _client().scrape(url, formats=["markdown"], only_main_content=True)
+        try:
+            doc = _client().scrape(url, formats=["markdown"], only_main_content=True)
+        except Exception as exc:
+            return _error(f"Scraping {url}", exc)
         return _add_page(store, added, url, doc)
 
     @tool
     def web_crawl(url: str, limit: int = 3) -> str:
         """Crawl a site starting at url (up to `limit` pages) and add each page as a source."""
         limit = max(1, min(limit, MAX_PAGES_PER_CRAWL))
-        job = _client().crawl(
-            url,
-            limit=limit,
-            scrape_options={"formats": ["markdown"], "only_main_content": True},
-            poll_interval=2,
-            timeout=120,
-        )
+        try:
+            job = _client().crawl(
+                url,
+                limit=limit,
+                scrape_options={"formats": ["markdown"], "only_main_content": True},
+                poll_interval=2,
+                timeout=120,
+            )
+        except Exception as exc:
+            return _error(f"Crawling {url}", exc)
         messages = []
         for doc in _field(job, "data") or []:
             page_url = _field(_field(doc, "metadata"), "source_url") or url
