@@ -1,0 +1,29 @@
+# Environment variables and secrets (מפתחות סודיים)
+.env
+.env.local
+.env.*.local
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+ENV/
+
+# Node / JS (אם יש חלק של פרונטאנד או Node)
+node_modules/
+dist/
+build/
+
+# IDEs & Editors (קבצי הגדרות של סביבות עבודה)
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS System files
+.DS_Store
+Thumbs.db
