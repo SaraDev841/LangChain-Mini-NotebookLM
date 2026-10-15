@@ -33,6 +33,15 @@
             <input id="web-query" type="text" placeholder="…or search the web for a topic" />
             <button type="button" id="web-search" class="pill-btn primary">Search web</button>
           </div>
+          <label class="muted"><input type="checkbox" id="web-review-toggle" checked /> Let me choose the pages</label>
+          <div id="web-review" class="web-review hidden">
+            <div class="muted">Pick the pages to add:</div>
+            <ul id="web-candidates" class="web-candidates"></ul>
+            <div class="add-actions">
+              <button type="button" id="web-confirm" class="pill-btn primary">Add selected</button>
+              <button type="button" id="web-review-cancel" class="pill-btn">Cancel</button>
+            </div>
+          </div>
         </form>
 
         <div class="select-row">

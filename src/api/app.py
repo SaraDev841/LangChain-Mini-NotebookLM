@@ -44,6 +44,8 @@ from api.schemas import (
     SetActiveRequest,
     SourceDetail,
     SourceInfo,
+    WebConfirmRequest,
+    WebReviewResponse,
     WebSourcesRequest,
     WebSourcesResponse,
 )
@@ -114,6 +116,38 @@ def add_web_sources(req: WebSourcesRequest) -> WebSourcesResponse:
                 f"Agent notes: {result.summary}"
             ),
         )
+    return result
+
+
+@app.post("/api/sources/web/review", response_model=WebReviewResponse)
+def review_web_sources(req: WebSourcesRequest) -> WebReviewResponse:
+    """Step 1 (human-in-the-loop): the agent searches and proposes pages to scrape."""
+    query = req.query.strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="Search query is empty.")
+    try:
+        review = services.start_web_review(query)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Web search failed: {exc}") from exc
+    if not review.candidates:
+        raise HTTPException(
+            status_code=502,
+            detail="The agent found no pages to propose. Try another topic.",
+        )
+    return review
+
+
+@app.post("/api/sources/web/confirm", response_model=WebSourcesResponse)
+def confirm_web_sources(req: WebConfirmRequest) -> WebSourcesResponse:
+    """Step 2: scrape and index only the pages the user selected."""
+    try:
+        result = services.confirm_web_review(req.session_id, req.urls)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc.args[0])) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Web search failed: {exc}") from exc
+    if not result.sources:
+        raise HTTPException(status_code=502, detail="None of the selected pages could be scraped.")
     return result
 
 

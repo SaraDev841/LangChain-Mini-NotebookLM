@@ -53,6 +53,25 @@ class WebSourcesResponse(BaseModel):
     sources: list[SourceInfo]
 
 
+class WebCandidate(BaseModel):
+    """A web page the research agent proposes to scrape (awaiting the user's choice)."""
+
+    url: str
+    title: str
+
+
+class WebReviewResponse(BaseModel):
+    session_id: str
+    candidates: list[WebCandidate]
+
+
+class WebConfirmRequest(BaseModel):
+    """The pages the user selected from a review session."""
+
+    session_id: str
+    urls: list[str]
+
+
 # -- chat ----------------------------------------------------------------------
 
 

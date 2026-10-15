@@ -113,21 +113,76 @@ async function uploadFile(file) {
 async function searchWeb() {
   const query = $("web-query").value.trim();
   if (!query) return;
+  const review = $("web-review-toggle").checked;
   const btn = $("web-search");
   const label = btn.textContent;
   btn.disabled = true;
   btn.textContent = "Searching…";
   try {
+    if (review) {
+      // Human-in-the-loop: the agent proposes pages, the user picks which get scraped.
+      const data = await api.send("POST", "/api/sources/web/review", { query });
+      showCandidates(data);
+      return;
+    }
     const data = await api.send("POST", "/api/sources/web", { query });
-    $("web-query").value = "";
-    $("add-form").classList.add("hidden");
-    await loadSources();
-    addMessage("system", `🌐 Added ${data.sources.length} web source(s). ${data.summary}`);
+    await finishWeb(data);
   } catch (e) {
     addMessage("system", `⚠ ${e.message}`);
   } finally {
     btn.disabled = false;
     btn.textContent = label;
+  }
+}
+
+async function finishWeb(data) {
+  $("web-query").value = "";
+  hideCandidates();
+  $("add-form").classList.add("hidden");
+  await loadSources();
+  addMessage("system", `🌐 Added ${data.sources.length} web source(s). ${data.summary}`);
+}
+
+function showCandidates(data) {
+  state.reviewSession = data.session_id;
+  const ul = $("web-candidates");
+  ul.innerHTML = "";
+  for (const c of data.candidates) {
+    const li = document.createElement("li");
+    li.innerHTML = `<input type="checkbox" checked value="${escapeHtml(c.url)}" />
+      <span>${escapeHtml(c.title)}<span class="w-url">${escapeHtml(c.url)}</span></span>`;
+    ul.appendChild(li);
+  }
+  $("web-review").classList.remove("hidden");
+}
+
+function hideCandidates() {
+  state.reviewSession = null;
+  $("web-candidates").innerHTML = "";
+  $("web-review").classList.add("hidden");
+}
+
+async function confirmWeb() {
+  const urls = [...$("web-candidates").querySelectorAll("input:checked")].map((i) => i.value);
+  if (!urls.length) {
+    hideCandidates();
+    return;
+  }
+  const btn = $("web-confirm");
+  btn.disabled = true;
+  btn.textContent = "Adding…";
+  try {
+    const data = await api.send("POST", "/api/sources/web/confirm", {
+      session_id: state.reviewSession,
+      urls,
+    });
+    await finishWeb(data);
+  } catch (e) {
+    addMessage("system", `⚠ ${e.message}`);
+    hideCandidates();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Add selected";
   }
 }
 
@@ -290,6 +345,8 @@ $("add-cancel").onclick = () => $("add-form").classList.add("hidden");
 $("add-form").addEventListener("submit", addText);
 $("add-file").onchange = (e) => e.target.files[0] && uploadFile(e.target.files[0]);
 $("web-search").onclick = searchWeb;
+$("web-confirm").onclick = confirmWeb;
+$("web-review-cancel").onclick = hideCandidates;
 $("web-query").addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     e.preventDefault();

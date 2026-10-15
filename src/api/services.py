@@ -17,6 +17,8 @@ from api.schemas import (
     Note,
     SourceDetail,
     SourceInfo,
+    WebCandidate,
+    WebReviewResponse,
     WebSourcesResponse,
 )
 from agents import chat, research
@@ -70,6 +72,22 @@ def remove_source(source_id: str) -> bool:
 def add_web_sources(query: str) -> WebSourcesResponse:
     """Deep web search: the research agent scrapes pages and indexes them as sources."""
     result = research.research(query)
+    return WebSourcesResponse(
+        summary=result.summary, sources=[_to_info(s) for s in result.sources]
+    )
+
+
+def start_web_review(query: str) -> WebReviewResponse:
+    """Human-in-the-loop: search, then let the user choose which pages to scrape."""
+    session_id, candidates = research.start_review(query)
+    return WebReviewResponse(
+        session_id=session_id,
+        candidates=[WebCandidate(url=c.url, title=c.title) for c in candidates],
+    )
+
+
+def confirm_web_review(session_id: str, urls: list[str]) -> WebSourcesResponse:
+    result = research.finish_review(session_id, urls)
     return WebSourcesResponse(
         summary=result.summary, sources=[_to_info(s) for s in result.sources]
     )

@@ -67,6 +67,10 @@ body {
 }
 .add-form input:focus, .add-form textarea:focus { outline: none; border-color: var(--accent); }
 .add-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.web-review { display: flex; flex-direction: column; gap: 8px; }
+.web-candidates { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto; }
+.web-candidates li { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; font-size: 13px; }
+.web-candidates .w-url { display: block; color: var(--muted); font-size: 11px; word-break: break-all; }
 
 /* sources list */
 .select-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 16px 8px; font-size: 12px; }

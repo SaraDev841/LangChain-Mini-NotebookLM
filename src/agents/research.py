@@ -8,12 +8,16 @@ answer from it like any uploaded file.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+import uuid
+from dataclasses import dataclass, field
 from urllib.parse import urlparse
 
 from firecrawl import Firecrawl
 from langchain.agents import create_agent
+from langchain.agents.middleware import HumanInTheLoopMiddleware
 from langchain_core.tools import tool
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import Command
 
 from core.store import Source, SourceStore, store
 
@@ -31,6 +35,21 @@ Given a topic, do this:
 3. Call web_scrape on each chosen URL. Use web_crawl only when several pages of one
    documentation site are needed.
 4. Finish with a short paragraph summarizing which pages you added and why.
+
+Scraped pages are indexed automatically; you never need to copy their content."""
+
+REVIEW_SYSTEM_PROMPT = """You are a deep web-research assistant for a notebook of sources.
+A human will choose which pages are actually scraped.
+
+Given a topic, do this:
+1. Write 3-4 DIFFERENT search queries that cover the topic from different angles, and call
+   web_search for each one.
+2. From all results, propose the 5-8 most relevant and credible, distinct pages by calling
+   web_scrape once per page (pass the result's title as `title`), all in the same turn.
+   Skip duplicates, ads, social media, forums and paywalled pages.
+3. The human approves or rejects each proposed page. Do NOT re-propose rejected pages and
+   do NOT propose more pages afterwards.
+4. Finish with a short paragraph summarizing which pages were added.
 
 Scraped pages are indexed automatically; you never need to copy their content."""
 
@@ -63,11 +82,11 @@ def _error(action: str, exc: Exception) -> str:
     return f"{action} failed: {exc}. Skip this one and try a different URL or query."
 
 
-def _add_page(store: SourceStore, added: list[Source], url: str, doc) -> str:
+def _add_page(store: SourceStore, added: list[Source], url: str, doc, fallback_title: str = "") -> str:
     markdown = (_field(doc, "markdown") or "").strip()
     if not markdown:
         return f"No readable content found at {url}."
-    title = _field(_field(doc, "metadata"), "title") or url
+    title = _field(_field(doc, "metadata"), "title") or fallback_title or url
     name = f"{title[:60]} [{urlparse(url).netloc}]"
     if any(s.name == name for s in store.list()):
         return f"Already added: {name}"
@@ -96,13 +115,16 @@ def _make_tools(store: SourceStore, added: list[Source]):
         return "\n\n".join(lines)
 
     @tool
-    def web_scrape(url: str) -> str:
-        """Scrape one web page and add its main content to the notebook as a source."""
+    def web_scrape(url: str, title: str = "") -> str:
+        """Scrape one web page and add its main content to the notebook as a source.
+
+        Pass the page title from the search results as `title`.
+        """
         try:
             doc = _client().scrape(url, formats=["markdown"], only_main_content=True)
         except Exception as exc:
             return _error(f"Scraping {url}", exc)
-        return _add_page(store, added, url, doc)
+        return _add_page(store, added, url, doc, title)
 
     @tool
     def web_crawl(url: str, limit: int = 3) -> str:
@@ -140,3 +162,106 @@ def research(topic: str) -> ResearchResult:
         config={"recursion_limit": 40},
     )
     return ResearchResult(summary=result["messages"][-1].text, sources=added)
+
+
+# -- human-in-the-loop: the user picks which pages get scraped ------------------
+
+
+@dataclass
+class Candidate:
+    url: str
+    title: str
+
+
+@dataclass
+class _Session:
+    agent: object
+    added: list[Source]
+    config: dict
+    requests: list[dict] = field(default_factory=list)
+
+
+_sessions: dict[str, _Session] = {}
+
+
+def _pending(result) -> list[dict]:
+    """The scrape calls waiting for human review (empty when the run finished)."""
+    interrupts = getattr(result, "interrupts", None)
+    if interrupts is None and isinstance(result, dict):
+        interrupts = result.get("__interrupt__")
+    requests: list[dict] = []
+    for item in interrupts or []:
+        requests.extend(item.value.get("action_requests", []))
+    return requests
+
+
+def _final_text(result) -> str:
+    state = result if isinstance(result, dict) else getattr(result, "value", {})
+    messages = state.get("messages") or []
+    return messages[-1].text if messages else ""
+
+
+def start_review(topic: str) -> tuple[str, list[Candidate]]:
+    """Search, then pause so the user can choose pages. Returns (session_id, candidates)."""
+    added: list[Source] = []
+    tools = [t for t in _make_tools(store, added) if t.name != "web_crawl"]
+    agent = create_agent(
+        model=MODEL,
+        system_prompt=REVIEW_SYSTEM_PROMPT,
+        tools=tools,
+        middleware=[
+            HumanInTheLoopMiddleware(
+                interrupt_on={"web_scrape": {"allowed_decisions": ["approve", "reject"]}},
+                description_prefix="Page proposed for scraping",
+            )
+        ],
+        checkpointer=InMemorySaver(),
+    )
+    session_id = uuid.uuid4().hex[:8]
+    config = {"configurable": {"thread_id": session_id}, "recursion_limit": 40}
+    result = agent.invoke(
+        {"messages": [{"role": "user", "content": f"Research topic: {topic}"}]},
+        config=config,
+    )
+    requests = _pending(result)
+    if not requests:
+        return session_id, []
+    _sessions[session_id] = _Session(agent, added, config, requests)
+    candidates = [
+        Candidate(
+            url=r["args"].get("url", ""),
+            title=r["args"].get("title") or r["args"].get("url", ""),
+        )
+        for r in requests
+    ]
+    return session_id, candidates
+
+
+def finish_review(session_id: str, approved_urls: list[str]) -> ResearchResult:
+    """Resume the paused run: scrape the approved pages, reject the rest."""
+    session = _sessions.pop(session_id, None)
+    if session is None:
+        raise KeyError("Unknown or expired review session.")
+    approved = set(approved_urls)
+    requests = session.requests
+    summary = ""
+    for round_no in range(3):
+        reject_msg = (
+            "The user did not select this page. Do not retry it."
+            if round_no == 0
+            else "The selection is complete. Do not propose more pages; write the final summary."
+        )
+        decisions = [
+            {"type": "approve"}
+            if round_no == 0 and r["args"].get("url") in approved
+            else {"type": "reject", "message": reject_msg}
+            for r in requests
+        ]
+        result = session.agent.invoke(
+            Command(resume={"decisions": decisions}), config=session.config
+        )
+        requests = _pending(result)
+        if not requests:
+            summary = _final_text(result)
+            break
+    return ResearchResult(summary=summary, sources=session.added)
